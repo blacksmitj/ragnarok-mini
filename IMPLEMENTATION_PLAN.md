@@ -1,58 +1,41 @@
-# IMPLEMENTATION PLAN: FULL-VIEWPORT WITH FLOATING RPG HUD
-### Phased Architecture Blueprint for Immersive Browser-Based Ragnarok Online UI/UX
+# IMPLEMENTATION PLAN: MINI RAGNAROK MMO
+### Full-Stack Distributed Game Architecture (PostgreSQL + Redis + Socket.IO + Phaser 3 + React 19)
 
-Dokumen ini merupakan panduan implementasi untuk merombak tata letak Mini Ragnarok dari model **Layout Boxed Web (Canvas di kiri, Sidebar panel di kanan)** menjadi **Full-Viewport Canvas 100vw/100vh** dengan **Floating Retro RPG HUD Overlay** yang otentik menyerupai Ragnarok Online klasik.
+Dokumen ini merupakan panduan implementasi master arsitektur **Mini Ragnarok (2D Browser-Based Action MMORPG)**.
+Sistem dibangun dengan arsitektur backend terdistribusi: **PostgreSQL** (Drizzle ORM) sebagai data storage persisten, **Redis** (ioredis + Socket.IO Redis Adapter) untuk in-memory cache, pub/sub, dan rate-limiting, serta **Phaser 3** + **React 19** pada frontend dengan tampilan **Full-Viewport & Retro Floating HUD**.
 
-Setiap fase dieksekusi mengikuti **8-Step Learning Methodology** (Explain, Build, Explain the Code, Run, Test, Experiment, Review, Checkpoint).
-
----
-
-## 🎯 Visi & Desain Arsitektur Baru
-
-### Sebelum (Boxed Web Layout):
-```text
-+-------------------------------------------------------------+
-| Header / Navbar (Title, Server Status, Save Banner)         |
-+------------------------------------+------------------------+
-|                                    | [Character Status]     |
-|  Phaser Canvas Fixed 800x600       | [Target Info]          |
-|  (Terbatas dalam kartu/container)  | [Inventory Panel]      |
-|                                    | [Game Menu / Action]   |
-+------------------------------------+------------------------+
-```
-
-### Sesudah (Full-Viewport + Classic Floating RPG Windows):
-```text
-+-------------------------------------------------------------+
-| [Top-Left]               [Top-Center]           [Top-Right] |
-| RO Character Status Bar  Target Lock HP Bar     Server Ping |
-| (Basic/Job HP/SP Lv Bar)                        & Online Count
-|                                                             |
-|                                                             |
-|                    🎮 PHASER GAME CANVAS                    |
-|                (FULLSCREEN 100vw x 100vh)                   |
-|               Auto-Resize & Responsive World                |
-|                                                             |
-|                                                             |
-| [Bottom-Left]                                [Bottom-Right] |
-| Retro Chat Log Box                           Shortcut Dock  |
-| [All | Whisper | Party]                      [Items/Skills] |
-+-------------------------------------------------------------+
-| [Bottom-Center/Edge] Fixed Full-Width Base & Job EXP Bar    |
-+-------------------------------------------------------------+
-```
+Setiap fase dieksekusi secara ketat mengikuti **8-Step Learning Methodology**:
+*(1. Explain, 2. Build, 3. Explain the Code, 4. Run, 5. Test, 6. Experiment, 7. Review, 8. Checkpoint)*.
 
 ---
 
-## 🛠️ Ringkasan Perubahan Teknis
+## 🏗️ 1. Arsitektur Distributed Game Stack
 
-| Bagian | Implementasi Lama | Desain Baru (Full-Viewport + Floating HUD) |
-|---|---|---|
-| **Canvas Scaling** | `Phaser.Scale.FIT` (800x600 fixed) | `Phaser.Scale.RESIZE` dengan `width: '100%'`, `height: '100%'` |
-| **Canvas Container** | `div` terbatas dalam grid `max-w-6xl` | `fixed inset-0 w-screen h-screen overflow-hidden` (Z-index 0) |
-| **HUD Layering** | Sidebar vertikal (`aside w-80`) | `pointer-events-none` container dengan floating windows `pointer-events-auto` (Z-index 10) |
-| **Retro Windows** | Card Tailwind modern flat | Glassmorphism retro Ragnarok (beveled border, draggable/collapsible, compact RO font styling) |
-| **EXP Display** | Bar mini di sidebar kanan | Full-width bottom sticky gauge (0.0% ~ 100.0%) khas Ragnarok Online |
+```text
++---------------------------------------------------------------------------------+
+|                               CLIENT LAYER (Browser)                            |
+|  [Phaser 3 Canvas (Full-Viewport)]  <--->  [Zustand Store]  <--->  [React 19 HUD]|
+|                 ^                                                               |
+|                 | (WebSockets / Socket.IO Client)                               |
++-----------------|---------------------------------------------------------------+
+                  v
++---------------------------------------------------------------------------------+
+|                           GAME SERVER (Node.js + Express)                       |
+|   - Authoritative Game Loop (20 TPS Tick Rate)                                  |
+|   - Combat Engine & Monster AI State Machine                                    |
+|   - Anti-Cheat & Action Cooldown (Redis Limiter)                                |
++---------------------------------------------------------------------------------+
+          |                                                               |
+          | In-Memory Cache, Pub/Sub & TTL                                | Persistence (ACID)
+          v                                                               v
++------------------------------------+           +--------------------------------+
+|       REDIS (VPS Docker)           |           |     POSTGRESQL (VPS Docker)    |
+| - Socket.IO Adapter (@socket.io)   |           | - Drizzle ORM Type-Safe Schema |
+| - Player Transient State & Pos     |           | - Characters & Base Stats      |
+| - Cooldown & Rate Limiter          |           | - Permanent Inventory & Equip  |
+| - Leaderboard (ZSET Level/Kills)   |           | - Accounts & Auth Logs         |
++------------------------------------+           +--------------------------------+
+```
 
 ---
 
@@ -60,118 +43,198 @@ Setiap fase dieksekusi mengikuti **8-Step Learning Methodology** (Explain, Build
 
 ```mermaid
 flowchart TD
-    F1["Fase 1: Full-Viewport Canvas & Phaser Resize Engine"] --> F2["Fase 2: Floating HUD Architecture & Pointer Event Isolation"]
-    F2 --> F3["Fase 3: Classic Ragnarok Status Bar & Target Info Window"]
-    F3 --> F4["Fase 4: Bottom-Dock Hotbar & Full-Width Sticky EXP Bar"]
-    F4 --> F5["Fase 5: Draggable / Collapsible Retro Windows & Polish"]
+    F1["Fase 1: PostgreSQL & Drizzle ORM Infrastructure"] --> F2["Fase 2: Redis Client, Cache & Socket.IO Adapter"]
+    F2 --> F3["Fase 3: Authoritative Multiplayer Game Loop & Redis State Tick"]
+    F3 --> F4["Fase 4: Anti-Cheat Cooldown & Redis ZSET Leaderboard"]
+    F4 --> F5["Fase 5: Full-Viewport Canvas & Phaser Resize Engine"]
+    F5 --> F6["Fase 6: Floating HUD Architecture & Pointer Event Isolation"]
+    F6 --> F7["Fase 7: Classic Ragnarok Status Bar & Target Window"]
+    F7 --> F8["Fase 8: Bottom-Dock Hotbar & Full-Width Sticky EXP Bar"]
+    F8 --> F9["Fase 9: Draggable / Collapsible Retro Windows & Inventory System"]
 ```
 
 ---
 
-## 📋 Rincian Fase Implementasi (Fase 1 s/d 5)
+## 📋 Rincian Fase Implementasi (Fase 1 s/d 9)
 
 ---
 
-### 🟢 Fase 1 — Full-Viewport Canvas & Phaser Resize Engine
-- **Tujuan**: Membuat canvas Phaser memenuhi layar browser secara penuh (`100vw x 100vh`) tanpa scrollbar, serta kamera game tetap berpusat pada karakter saat ukuran jendela browser diubah (*window resize*).
+### 🟢 Fase 1 — PostgreSQL & Drizzle ORM Infrastructure
+- **Tujuan**: Mengganti SQLite lokal dengan PostgreSQL remote (VPS Docker) menggunakan Drizzle ORM untuk manajemen schema, migrasi type-safe, dan data persisten karakter/inventori.
+- **Explain**:
+  - Mengapa PostgreSQL untuk data inti MMORPG (ACID compliance, transaksi inventory tanpa duplikasi item).
+  - Keunggulan Drizzle ORM vs Prisma (zero-overhead, lightweight, SQL-like syntax).
+  - Skema tabel: `characters`, `inventories`, dan auto-login logic.
+- **Build**:
+  - Konfigurasi `drizzle.config.ts` dan schema di `server/src/db/schema.ts`.
+  - Inisialisasi koneksi pool PostgreSQL di `server/src/db/index.ts` menggunakan library `postgres` / `drizzle-orm`.
+  - Migrasi skema ke PostgreSQL VPS via `drizzle-kit push`.
+  - Refactor `dbService` untuk mendukung operasi async PostgreSQL.
+- **Explain the Code**: Bedah struktur query Drizzle (`eq`, `select`, `insert`, `update`) dan connection pooling.
+- **Run**: Jalankan migration `npx drizzle-kit push` dan start server `npm run dev:server`.
+- **Test**: Buka game, masukkan nama pemain baru, verifikasi row data masuk ke tabel `characters` di PostgreSQL VPS.
+- **Experiment**: Tambahkan kolom baru `guild_name` atau `job_class` pada skema dan lakukan push schema.
+- **Review**: Penanganan network timeout/reconnect pada koneksi remote database VPS.
+- **Checkpoint**: Server terkoneksi stabil ke PostgreSQL VPS via Drizzle ORM dan data akun tersimpan secara persisten.
+
+---
+
+### 🟢 Fase 2 — Redis Client, Cache & Socket.IO Adapter
+- **Tujuan**: Menghubungkan game server ke Redis VPS, mengimplementasikan `@socket.io/redis-adapter` untuk pub/sub multiplayer, serta helper caching state pemain.
+- **Explain**:
+  - Arsitektur Socket.IO Adapter: Mengapa adapter dibutuhkan untuk scaling multi-instance / zero-downtime server.
+  - Penanganan latency network dan error event listener pada Redis client (`ioredis`).
+- **Build**:
+  - Setup singleton Redis client (`pubClient` & `subClient`) di `server/src/redis/index.ts`.
+  - Integrasikan adapter ke Socket.IO server: `io.adapter(createAdapter(pubClient, subClient))`.
+  - Buat helper method Redis: `savePlayerSession`, `getPlayerSession`, `deletePlayerSession`.
+- **Explain the Code**: Alur kerja Pub/Sub Socket.IO Adapter dalam menyebarkan paket socket ke channel Redis.
+- **Run**: Start server; pastikan log terminal menunjukkan `[Redis] Connected to VPS Redis successfully`.
+- **Test**: Connect 2 client browser; periksa keys di Redis CLI VPS (`KEYS *` atau `HGETALL player:session:*`).
+- **Experiment**: Uji coba mengirim pesan via `pubClient.publish('game:broadcast', ...)` dan tangkap di subscriber.
+- **Review**: Mengatasi connection leak jika socket disconnect tidak membersihkan session Redis.
+- **Checkpoint**: Socket.IO terintegrasi dengan Redis Adapter dan session player tersimpan di Redis VPS.
+
+---
+
+### 🟢 Fase 3 — Authoritative Multiplayer Game Loop & Redis State Tick
+- **Tujuan**: Memisahkan pergerakan realtime berkecepatan tinggi ke Redis in-memory cache, lalu menyimpan snapshot ke PostgreSQL secara periodik (Write-behind cache).
+- **Explain**:
+  - *Write-behind caching pattern*: Mengapa game multiplayer tidak boleh menulis koordinat X,Y ke disk SQL setiap frame tick.
+  - Sinkronisasi Game Loop 20 TPS (50ms interval) di server.
+- **Build**:
+  - Update `server/src/index.ts`: Setiap tick, simpan transient position & HP pemain ke Redis Hash (`player:<id>:state`).
+  - Timer background cron (misal tiap 30-60 detik) untuk batch sync data dari Redis ke PostgreSQL via Drizzle.
+- **Explain the Code**: Logika snapshot batch update untuk menghemat IOPS database disk.
+- **Run**: Gerakkan karakter di browser; pantau update key `player:<id>:state` di Redis.
+- **Test**: Force-kill server, pastikan state terakhir minimal tersimpan sesuai flush snapshot terakhir.
+- **Experiment**: Sesuaikan interval sync interval dari 30 detik menjadi 10 detik dan amati performanya.
+- **Review**: Resiko data loss jika server mati mendadak sebelum periodic sync (penanganan `SIGTERM`/`SIGINT` graceful shutdown).
+- **Checkpoint**: Koordinat dan HP dinamis terkelola di Redis dan tersinkronisasi berkala ke PostgreSQL.
+
+---
+
+### 🟢 Fase 4 — Anti-Cheat Cooldown & Redis ZSET Leaderboard
+- **Tujuan**: Memanfaatkan Redis Atomic Commands & TTL untuk mencegah spam serangan / potion (Anti-Cheat), serta Redis Sorted Sets (ZSET) untuk realtime rank leaderboard.
+- **Explain**:
+  - Token Bucket / Atomic SET NX EX untuk cooldown skill & delay serangan (ASPD).
+  - Algoritma Redis ZSET (`ZADD`, `ZINCRBY`, `ZREVRANGE`) dengan kompleksitas O(log N).
+- **Build**:
+  - Middleware / Helper Cooldown: `canPerformAction(playerId, actionType, cooldownMs)` menggunakan Redis key TTL.
+  - Leaderboard System di `server/src/redis/leaderboard.ts` untuk melacak `leaderboard:level` dan `leaderboard:kills`.
+  - Endpoint socket baru `request:leaderboard` yang mengirimkan Top 10 pemain.
+- **Explain the Code**: Penggunaan Redis `SET ... NX PX` untuk concurrency lock tindakan pemain.
+- **Run**: Coba spam klik serangan atau minum potion dalam rentang 100ms.
+- **Test**: Server menolak paket serangan jika cooldown belum selesai. Cek perolehan peringkat di leaderboard setelah monster mati.
+- **Experiment**: Tambahkan kategori leaderboard baru: `leaderboard:zeny`.
+- **Review**: Sinkronisasi penghapusan leaderboard saat akun direset/dihapus.
+- **Checkpoint**: Anti-cheat action cooldown aktif via Redis dan fitur Leaderboard Top 10 berfungsi instan.
+
+---
+
+### 🟢 Fase 5 — Full-Viewport Canvas & Phaser Resize Engine
+- **Tujuan**: Membuat canvas Phaser memenuhi layar browser secara penuh (`100vw x 100vh`) tanpa scrollbar, dengan kamera game auto-centering.
 - **Explain**:
   - Perbedaan `Phaser.Scale.FIT` vs `Phaser.Scale.RESIZE`.
-  - Mengapa `window.innerHeight` pada browser mobile/desktop membutuhkan penanganan CSS `h-screen h-[100dvh]`.
-  - Update `this.cameras.main.setViewport` dan perataan zoom kamera pada dunia 1600x1200.
+  - CSS layout `fixed inset-0 w-screen h-screen overflow-hidden`.
 - **Build**:
-  - Modifikasi `src/game/config/phaserConfig.ts`: beralih ke `Phaser.Scale.RESIZE`.
-  - Modifikasi `src/components/GameCanvas.tsx` dan `src/components/GameLayout.tsx`: menggunakan layout container `fixed inset-0 w-full h-full`.
-  - Event listener resize di `MainScene.ts` untuk menjaga kamera tetap tracking pemain utama.
-- **Explain the Code**: Menjelaskan konfigurasi resize Phaser dan integrasi CSS viewport Tailwind.
-- **Run**: Menjalankan aplikasi dengan `npm run dev:all` dan memverifikasi canvas memenuhi seluruh layar browser.
-- **Test**: Resize ukuran browser ke berbagai dimensi; pastikan tidak ada garis hitam (*letterbox*) dan canvas merender penuh.
-- **Experiment**: Ubah tingkat zoom kamera (`cameras.main.setZoom(1.2)`) untuk melihat pengaruh terhadap viewport luas.
-- **Review**: Potensi lag bila resolusi sangat besar (4K) jika tidak dibatasi pixel ratio.
-- **Checkpoint**: Layar canvas memenuhi 100% viewport browser tanpa scrollbar.
+  - Modifikasi `src/game/config/phaserConfig.ts` ke mode `Phaser.Scale.RESIZE`.
+  - Perbarui `GameCanvas.tsx` dan `GameLayout.tsx` untuk menampung canvas fullscreen.
+  - Pasang resize listener di `MainScene.ts` untuk camera viewport recalculation.
+- **Explain the Code**: Mekanisme resize handling Phaser di React container.
+- **Run**: Buka game di browser dengan mode fullscreen / F11.
+- **Test**: Ubah ukuran window browser; verifikasi game canvas beradaptasi mulus tanpa letterbox hitam.
+- **Experiment**: Sesuaikan tingkat zoom kamera default (`cameras.main.setZoom(1.0)`).
+- **Review**: Batasi device pixel ratio agar tidak membebani GPU di layar resolusi tinggi (Retina/4K).
+- **Checkpoint**: Canvas game merender penuh 100% viewport secara responsif.
 
 ---
 
-### 🟢 Fase 2 — Floating HUD Architecture & Pointer Event Isolation
-- **Tujuan**: Membangun layer overlay UI React di atas canvas Phaser dengan pemisahan event klik yang presisi (pemain bisa klik tanah untuk jalan tanpa terhalang HUD kosong).
+### 🟢 Fase 6 — Floating HUD Architecture & Pointer Event Isolation
+- **Tujuan**: Membangun layer overlay UI React transparan di atas canvas Phaser tanpa memblokir klik mouse ke dunia game.
 - **Explain**:
-  - Konsep CSS `pointer-events-none` pada overlay wrapper dan `pointer-events-auto` pada elemen jendela interaktif.
-  - Z-Index layering: Background Canvas (z-0), HUD Panels (z-10), Modal & Chat Input (z-20), Tooltip/Floating Text (z-30).
+  - Konsep CSS `pointer-events-none` pada root overlay dan `pointer-events-auto` pada interactive windows.
+  - Z-Index layering yang rapi (Canvas z-0, HUD z-10, Modals z-20).
 - **Build**:
-  - Membuat arsitektur layout overlay di `src/components/hud/FloatingHUDContainer.tsx`.
-  - Menempatkan indikator koneksi server MMO dan ping badge di pojok atas secara elegan dan transparan.
-- **Explain the Code**: Menjelaskan cara kerja event pass-through antara DOM React dan canvas WebGL/Phaser.
-- **Run**: Buka game dan klik area kosong di samping/bawah HUD.
-- **Test**: Klik di area layar kosong tembus ke canvas (pemain bergerak/menyerang), sedangkan klik tombol pada jendela HUD memicu aksi UI tanpa menggerakkan karakter.
-- **Experiment**: Coba tambahkan tombol minimize di salah satu widget.
-- **Review**: Jebakan klik tembus saat drag cursor dari luar window ke dalam canvas.
-- **Checkpoint**: Layering HUD mengambang sempurna di atas viewport game dan tidak memblokir pergerakan karakter di area transparan.
+  - Buat komponen `src/components/hud/FloatingHUDContainer.tsx`.
+  - Integrasikan indikator ping, FPS, dan status koneksi server MMO di pojok kanan atas.
+- **Explain the Code**: Pembagian event interaksi mouse antara React DOM dan canvas WebGL.
+- **Run**: Klik area kosong di tengah dan samping layar.
+- **Test**: Karakter berjalan ketika klik area kosong, namun merespons tombol jika mengklik jendela HUD.
+- **Experiment**: Tambahkan toggle tombol untuk menyembunyikan seluruh HUD (*Cinematic Mode*).
+- **Review**: Mencegah click-through saat pemain menyeret mouse keluar dari jendela HUD.
+- **Checkpoint**: HUD mengambang sempurna di atas viewport dan tidak menghalangi pergerakan karakter.
 
 ---
 
-### 🟢 Fase 3 — Classic Ragnarok Status Bar & Target Info Window
-- **Tujuan**: Merombak tampilan bar status pemain dan target monster menjadi widget retro khas Ragnarok Online (Basic Information Window).
+### 🟢 Fase 7 — Classic Ragnarok Status Bar & Target Window
+- **Tujuan**: Merombak tampilan bar status pemain dan target monster menjadi widget retro khas Ragnarok Online.
 - **Explain**:
-  - Anatomi jendela status RO: Nama Karakter, Job title, Base Lv, Job Lv, Bar HP hijau, Bar SP biru, Zeny count.
-  - Desain Target Window yang menempel di bagian atas-tengah (*boss/target bar*) yang hanya muncul saat monster ditarget atau dipukul.
+  - Anatomi jendela status RO: Nama Karakter, Job title, Base Lv, Bar HP hijau, Bar SP biru, Zeny count.
+  - Floating target monster bar di area atas-tengah layar.
 - **Build**:
-  - Perombakan `src/components/hud/CharacterStatus.tsx` menjadi floating window bergaya retro RO (beveled edge, translucent dark navy background, gold accents).
-  - Perombakan `src/components/hud/MonsterTargetInfo.tsx` menjadi floating target panel di bagian atas tengah layar.
-- **Explain the Code**: Bedah style CSS retro (border beveled khas RO, gradient bar HP/SP).
-- **Run**: Menjalankan game dan menguji tampilan status di pojok kiri atas.
-- **Test**: Serang Poring/Wolf; pastikan bar target monster muncul di posisi atas-tengah dan HP berkurang secara visual.
-- **Experiment**: Tambahkan avatar portrait kecil di samping status karakter.
-- **Review**: Memastikan teks HP/SP tidak overflow saat angka menyentuh ratusan ribu.
-- **Checkpoint**: Karakter status & Target bar tampil otentik mengambang di pojok kiri atas & tengah atas layar.
+  - Perombakan `CharacterStatus.tsx` dengan styling retro (beveled border, warna klasik navy Ragnarok).
+  - Perombakan `MonsterTargetInfo.tsx` menjadi floating target panel di bagian atas tengah layar.
+- **Explain the Code**: Styling retro CSS dan sinkronisasi reaktif data dari Zustand store.
+- **Run**: Serang monster di game.
+- **Test**: Target window muncul di atas tengah saat monster dipilih/diserang, dan HP berkurang akurat.
+- **Experiment**: Tambahkan badge status efek (misal ikon buff atau status stun).
+- **Review**: Format angka HP/SP ribuan (`1,250 / 2,000`) agar rapi.
+- **Checkpoint**: Jendela status karakter dan target monster tampil otentik bergaya Ragnarok Online.
 
 ---
 
-### 🟢 Fase 4 — Bottom-Dock Hotbar & Full-Width Sticky EXP Bar
-- **Tujuan**: Menambahkan Quickslot/Hotbar (F1-F9 / 1-9) di kanan bawah dan EXP Bar tipis membentang horizontal penuh di bagian paling bawah layar persis Ragnarok Online.
+### 🟢 Fase 8 — Bottom-Dock Hotbar & Full-Width Sticky EXP Bar
+- **Tujuan**: Menambahkan Quickslot/Hotbar (1-9 / F1-F9) dan EXP Bar tipis di dasar layar (0.0% ~ 100.0%).
 - **Explain**:
-  - Desain UI Ragnarok klasik: EXP Bar berada di dasar layar paling bawah dengan indikator persentase detail (misal: `[EXP: 45.5%]`).
-  - Hotbar dock untuk consumable potion (Red Potion, Meat) dan shortcut aksi.
+  - Layout bottom dock RPG: EXP Bar paling bawah (`bottom-0 left-0 right-0`), Hotbar dock di atasnya.
 - **Build**:
-  - Pembuatan komponen `src/components/hud/BottomExpBar.tsx` (sticky `bottom-0 left-0 right-0`).
-  - Pembuatan komponen `src/components/hud/QuickSlotBar.tsx` (slot item F1-F4 atau 1-4 dengan shortcut keyboard).
-  - Reposisi `ChatWindow.tsx` agar berada di pojok kiri bawah tepat di atas EXP bar.
-- **Explain the Code**: Integrasi event keyboard global untuk konsumsi potion via Hotbar.
-- **Run**: Buka game, tekan angka 1 untuk minum Red Potion dari hotbar.
-- **Test**: Kalahkan monster; amati pergerakan bar EXP di dasar layar dari kiri ke kanan dengan label persentase dinamis.
-- **Experiment**: Kustomisasi warna EXP bar (kuning keemasan khas Ragnarok).
-- **Review**: Menjaga agar chat box tidak bertubrukan dengan hotbar di resolusi layar kecil/laptop.
-- **Checkpoint**: EXP bar membentang di bagian bawah layar dan Hotbar responsif terhadap input tombol.
+  - Buat `src/components/hud/BottomExpBar.tsx` dengan progress bar emas khas RO.
+  - Buat `src/components/hud/QuickSlotBar.tsx` untuk konsumsi item cepat via keyboard shortcut.
+  - Reposisi `ChatWindow.tsx` di pojok kiri bawah.
+- **Explain the Code**: Global keyboard listener untuk aktivasi slot item hotbar.
+- **Run**: Tekan tombol `1` pada keyboard untuk meminum potion dari hotbar.
+- **Test**: EXP bar bertambah secara proporsional setiap monster dikalahkan.
+- **Experiment**: Tambahkan indikator tooltip saat kursor diarahkan ke EXP bar.
+- **Review**: Pastikan input chat tidak memicu shortcut hotbar saat pemain sedang mengetik pesan.
+- **Checkpoint**: EXP bar membentang penuh di dasar layar dan hotbar aktif berfungsi.
 
 ---
 
-### 🟢 Fase 5 — Draggable / Collapsible Retro Windows & Polish
-- **Tujuan**: Memberikan kemampuan drag-and-drop pada jendela HUD (Status, Inventory, Chat) serta tombol toggle hide/minimize (shortcut `Alt+V`, `Alt+E`).
+### 🟢 Fase 9 — Draggable / Collapsible Retro Windows & Inventory System
+- **Tujuan**: Memberikan fitur drag-and-drop pada jendela HUD (Status, Inventory, Leaderboard) serta toggle shortcut (`Alt+V`, `Alt+E`).
 - **Explain**:
-  - State posisi window (`{ x, y, isOpen, isMinimized }`) menggunakan penyimpanan local / memory.
-  - Event mouse move & pointer capture untuk drag window yang mulus tanpa jitter.
+  - Pengelolaan state koordinat window dan mouse pointer capture.
+  - Sinkronisasi inventori permanen antara React, Zustand, Redis, dan PostgreSQL.
 - **Build**:
-  - Membuat wrapper component `DraggableRetroWindow.tsx` dengan handle header retro.
-  - Menghubungkan Inventory (`InventoryPanel.tsx`) ke floating draggable window yang bisa dibuka-tutup dengan tombol `I` atau ikon di dock.
-- **Explain the Code**: Bedah implementasi dragging pada komponen React dengan batasan boundary layar.
-- **Run**: Buka inventory, drag jendela ke tengah canvas, lalu minimalkan.
-- **Test**: Jendela dapat digeser ke posisi mana pun di viewport tanpa keluar dari batas layar.
-- **Experiment**: Tambahkan suara SFX klik retro saat tombol window di-click.
-- **Review**: Mencegah event drag memicu aksi jalan (*click to move*) di canvas game.
-- **Checkpoint**: Seluruh jendela HUD dapat di-toggle, di-drag, dan game terasa seperti client Ragnarok Online yang sesungguhnya.
+  - Buat wrapper component `DraggableRetroWindow.tsx`.
+  - Integrasikan inventori item dengan PostgreSQL (item drop, consume, drop rate).
+  - Hubungkan jendela Leaderboard Top 10 ke data Redis ZSET.
+- **Explain the Code**: Penanganan drag boundary agar window tidak bisa diseret keluar dari layar browser.
+- **Run**: Tekan `I` untuk membuka tas, drag jendela ke posisi lain di layar.
+- **Test**: Jendela dapat digeser bebas dan posisinya tersimpan; item di inventory dapat digunakan.
+- **Experiment**: Tambahkan sound effect (SFX) retro saat membuka/menutup window.
+- **Review**: Mencegah event drag memicu aksi pergerakan di canvas game.
+- **Checkpoint**: Seluruh jendela HUD dapat di-drag, di-minimize, dan data inventori tersinkronisasi penuh ke database.
 
 ---
 
 ## 📋 Matriks Status Pelaksanaan
 
-| Fase | Fitur UI/UX Full-Viewport & Floating HUD | Status | Tanggal Eksekusi |
-|---|---|:---:|:---:|
-| **Fase 1** | Full-Viewport Canvas & Phaser Resize Engine (`100vw x 100vh`) | ✅ Selesai | 06 Nov 2026 |
-| **Fase 2** | Floating HUD Architecture & Pointer Event Isolation | ✅ Selesai | 06 Nov 2026 |
-| **Fase 3** | Classic Ragnarok Status Bar & Target Info Window | ✅ Selesai | 06 Nov 2026 |
-| **Fase 4** | Bottom-Dock Hotbar & Full-Width Sticky EXP Bar | ✅ Selesai | 06 Nov 2026 |
-| **Fase 5** | Draggable / Collapsible Retro Windows & Polish (Alt+V/E) | ✅ Selesai | 06 Nov 2026 |
+| Fase | Fokus Modul Arsitektur | Status | Tech Stack Utama |
+|---|---|:---:|---|
+| **Fase 1** | PostgreSQL & Drizzle ORM Infrastructure | ⏳ Ready | PostgreSQL, Drizzle ORM, TypeScript |
+| **Fase 2** | Redis Client, Cache & Socket.IO Adapter | ⏳ Queued | Redis, ioredis, @socket.io/redis-adapter |
+| **Fase 3** | Authoritative Multiplayer Loop & Redis State Tick | ⏳ Queued | Node.js Tick Loop, Redis Hash, Drizzle |
+| **Fase 4** | Anti-Cheat Cooldown & Redis ZSET Leaderboard | ⏳ Queued | Redis TTL / Lock, Redis Sorted Sets |
+| **Fase 5** | Full-Viewport Canvas & Phaser Resize Engine | ⏳ Queued | Phaser 3 Scale RESIZE, React 19, Tailwind |
+| **Fase 6** | Floating HUD Architecture & Pointer Isolation | ⏳ Queued | React 19, CSS Pointer-Events, Zustand |
+| **Fase 7** | Classic Ragnarok Status Bar & Target Window | ⏳ Queued | Tailwind CSS, Retro Ragnarok Styling |
+| **Fase 8** | Bottom-Dock Hotbar & Sticky Full EXP Bar | ⏳ Queued | Keyboard Shortcuts, EXP Formula, HUD |
+| **Fase 9** | Draggable Retro Windows & Inventory Sync | ⏳ Queued | Mouse Drag Engine, Full-Stack Sync |
 
 ---
 
-> 🎮 **Langkah Berikutnya:**
-> Rencana implementasi telah diperbarui untuk **Full-Viewport Canvas dengan Floating Retro RPG HUD**.
-> Konfirmasikan untuk segera memulai **Fase 1: Full-Viewport Canvas & Phaser Resize Engine**.
+> 🎮 **Langkah Selanjutnya:**
+> Arsitektur telah diperbarui secara menyeluruh menggabungkan **PostgreSQL VPS**, **Redis VPS**, dan **Full-Viewport Retro HUD**.
+> Konfirmasikan untuk segera mengeksekusi **Fase 1: PostgreSQL & Drizzle ORM Infrastructure**!

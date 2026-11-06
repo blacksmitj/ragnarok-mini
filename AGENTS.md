@@ -25,9 +25,11 @@ Setiap agen yang berinteraksi dalam proyek ini **wajib** mematuhi:
 | **Game Engine** | Phaser 3/4 (`phaser`) | 2D Canvas rendering, Client Interpolation, Animations |
 | **Networking** | Socket.IO (`socket.io` & `socket.io-client`) | Protokol komunikasi real-time dua arah (WebSockets) |
 | **Server Backend** | Node.js + Express + TypeScript (`server/`) | Authoritative game loop, combat logic, anti-cheat, monster AI |
+| **Database Persisten** | PostgreSQL (VPS Docker) + Drizzle ORM | Storage karakter, inventori, transaksi ACID type-safe |
+| **Cache & Pub/Sub** | Redis (VPS Docker) + ioredis | Socket.IO adapter, player state tick, anti-cheat cooldown, leaderboard |
 | **State Bridge** | Zustand (`zustand`) | External store penghubung Phaser, WebSockets, dan React |
 | **Styling** | Tailwind CSS v4 (`@tailwindcss/vite`) | Utility classes untuk HUD, chat box, gauges, & UI retro |
-| **Doc Lookup** | MCP Context7 | Selalu verifikasi API Phaser/Zustand/Socket.IO via Context7 jika ragu |
+| **Doc Lookup** | MCP Context7 | Selalu verifikasi API Phaser/Zustand/Socket.IO/Drizzle via Context7 jika ragu |
 
 ---
 
