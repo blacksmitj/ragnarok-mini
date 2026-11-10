@@ -12,7 +12,7 @@ Tujuan utamanya bukan hanya menghasilkan game yang selesai, melainkan **memahami
 Setiap agen yang berinteraksi dalam proyek ini **wajib** mematuhi:
 - **[PRD (Product Requirements Document)](./prd.md)**
 - **[IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)**
-- **8-Step Learning Methodology** di setiap fasenya.
+- Eksekusi terarah per fase sesuai roadmap.
 
 ---
 
@@ -58,21 +58,13 @@ Setiap agen yang berinteraksi dalam proyek ini **wajib** mematuhi:
 
 ---
 
-## 📚 4. Standar Eksekusi: 8-Step Learning Methodology
+## 📚 4. Standar Eksekusi: Eksekusi Per Phase
 
-Setiap pengerjaan satu fase pada [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) harus disajikan dengan struktur konsisten:
-
-1. **Explain (Konsep Dasar)**: Jelaskan teori fundamental (misal Game Loop, Hitbox, Velocity vector, Zustand bridge).
-2. **Build (File & Kode)**: Tuliskan kode dengan path file absolut/relatif yang jelas dan implementasi fungsional.
-3. **Explain the Code**: Bedah baris kode kritis dan alasan arsitekturalnya.
-4. **Run**: Instruksi perintah menjalankan server (`npm run dev`) dan URL yang dibuka.
-5. **Test**: Kriteria verifikasi konkret (apa yang harus dilihat/diuji oleh pengguna).
-6. **Experiment**: Berikan 1 tugas mandiri kecil untuk dicoba sendiri oleh pengguna agar melatih pemahaman.
-7. **Review**: Soroti potensi jebakan (*common pitfalls*) atau bug yang sering muncul.
-8. **Checkpoint**: Checklist *Definition of Done* fase tersebut.
+Pengerjaan dilakukan secara bertahap **fase per fase** sesuai roadmap [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md).
 
 > ⚠️ **Aturan Penting**: 
 > - **Satu fase per sesi/prompt**. Jangan pernah menggabungkan atau melompati fase tanpa persetujuan eksplisit dari pengguna.
+> - Fokus langsung ke implementasi teknis, verifikasi fungsional, dan pengujian.
 > - Tunggu konfirmasi dari pengguna sebelum beranjak ke fase berikutnya.
 
 ---

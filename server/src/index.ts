@@ -20,6 +20,7 @@ import {
 } from './types.js';
 import { ServerMonster } from './ServerMonster.js';
 import { dbService } from './db.js';
+import { redisAdapter, redisService, pubClient } from './redis/index.js';
 
 const app = express();
 app.use(cors());
@@ -32,20 +33,34 @@ app.get('/health', (_req, res) => {
   });
 });
 
+app.get('/leaderboard', async (_req, res) => {
+  try {
+    const topLevels = await redisService.getTopLeaderboard('level', 10);
+    const topKills = await redisService.getTopLeaderboard('kills', 10);
+    res.json({
+      level: topLevels,
+      kills: topKills
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
-  }
+  },
+  adapter: redisAdapter
 });
 
 const PORT = process.env.PORT || 3001;
 const TICK_RATE = 20;
 
 // In-Memory Storage untuk Pemain yang Sedang Online
-const players = new Map<string, PlayerData>();
+const players = new Map<string, PlayerData & { username?: string }>();
 
 // Inisialisasi Daftar Monster Server (Prontera Training Ground)
 const MONSTER_SPAWNS = [
@@ -97,80 +112,103 @@ io.on('connection', (socket: Socket) => {
     serverTime: Date.now()
   });
 
-  // 2. Event saat pemain login / bergabung ke arena (Database SQLite Authentication)
-  socket.on('player:join', (payload: JoinPayload) => {
-    const username = payload.username || `novice_${socket.id.slice(0, 4)}`;
-    const dbChar = dbService.getOrCreateAccount(username);
-
-    const newPlayer: PlayerData = {
-      id: socket.id,
-      name: dbChar.name,
-      x: dbChar.pos_x,
-      y: dbChar.pos_y,
-      level: dbChar.level,
-      hp: dbChar.hp,
-      maxHp: dbChar.max_hp,
-      direction: 'down'
-    };
-
-    // Simpan ke daftar pemain online
-    players.set(socket.id, newPlayer);
-    console.log(`[MMO Server] Akun '${dbChar.username}' (${dbChar.name}) login dari DB di (${newPlayer.x}, ${newPlayer.y}). Level: ${dbChar.level}, Zeny: ${dbChar.zeny}`);
-
-    // Kirim data lengkap karakter dari database ke client pemain
-    let parsedInventory = [];
+  // 2. Event saat pemain login / bergabung ke arena (Database PostgreSQL Authentication)
+  socket.on('player:join', async (payload: JoinPayload) => {
     try {
-      parsedInventory = JSON.parse(dbChar.inventory_json);
-    } catch {
-      parsedInventory = [];
+      const username = payload.username || `novice_${socket.id.slice(0, 4)}`;
+      const dbChar = await dbService.getOrCreateAccount(username);
+
+      const newPlayer: PlayerData & { username?: string } = {
+        id: socket.id,
+        username: dbChar.username,
+        name: dbChar.name,
+        x: dbChar.pos_x,
+        y: dbChar.pos_y,
+        level: dbChar.level,
+        hp: dbChar.hp,
+        maxHp: dbChar.max_hp,
+        direction: 'down'
+      };
+
+      // Simpan ke daftar pemain online & Redis session & initial state
+      players.set(socket.id, newPlayer);
+      await redisService.savePlayerSession(socket.id, dbChar.username, dbChar.name);
+      await redisService.updatePlayerTransientState(socket.id, {
+        username: dbChar.username,
+        name: dbChar.name,
+        x: newPlayer.x,
+        y: newPlayer.y,
+        hp: newPlayer.hp,
+        maxHp: newPlayer.maxHp,
+        level: newPlayer.level,
+        direction: newPlayer.direction,
+      });
+      console.log(`[MMO Server] Akun '${dbChar.username}' (${dbChar.name}) login dari DB di (${newPlayer.x}, ${newPlayer.y}). Level: ${dbChar.level}, Zeny: ${dbChar.zeny}`);
+
+      // Update Redis Leaderboard Level
+      await redisService.updateLeaderboard('level', dbChar.name, dbChar.level);
+
+      // Kirim data lengkap karakter dari database ke client pemain
+      let parsedInventory = [];
+      try {
+        parsedInventory = JSON.parse(dbChar.inventory_json);
+      } catch {
+        parsedInventory = [];
+      }
+
+      socket.emit('character:loaded', {
+        username: dbChar.username,
+        name: dbChar.name,
+        level: dbChar.level,
+        hp: dbChar.hp,
+        maxHp: dbChar.max_hp,
+        exp: dbChar.exp,
+        maxExp: dbChar.max_exp,
+        baseAtk: dbChar.base_atk,
+        zeny: dbChar.zeny,
+        x: dbChar.pos_x,
+        y: dbChar.pos_y,
+        inventory: parsedInventory
+      });
+
+      // A. Kirim daftar semua pemain online saat ini HANYA ke pemain baru tersebut
+      const onlineList = Array.from(players.values());
+      socket.emit('current:players', onlineList);
+
+      // Kirim seluruh status monster ke pemain yang baru bergabung
+      const monsterList = Array.from(monsters.values()).map(m => m.toJSON());
+      socket.emit('monsters:init', monsterList);
+
+      // Kirim seluruh loot di tanah ke pemain yang baru bergabung
+      socket.emit('loot:current', Array.from(groundItems.values()));
+
+      // B. Broadcast kemunculan pemain baru ke SEMUA pemain lain yang sudah ada di arena
+      socket.broadcast.emit('player:joined', newPlayer);
+    } catch (err) {
+      console.error('[MMO Server] Error saat player:join:', err);
     }
-
-    socket.emit('character:loaded', {
-      username: dbChar.username,
-      name: dbChar.name,
-      level: dbChar.level,
-      hp: dbChar.hp,
-      maxHp: dbChar.max_hp,
-      exp: dbChar.exp,
-      maxExp: dbChar.max_exp,
-      baseAtk: dbChar.base_atk,
-      zeny: dbChar.zeny,
-      x: dbChar.pos_x,
-      y: dbChar.pos_y,
-      inventory: parsedInventory
-    });
-
-    // A. Kirim daftar semua pemain online saat ini HANYA ke pemain baru tersebut
-    const onlineList = Array.from(players.values());
-    socket.emit('current:players', onlineList);
-
-    // Kirim seluruh status monster ke pemain yang baru bergabung
-    const monsterList = Array.from(monsters.values()).map(m => m.toJSON());
-    socket.emit('monsters:init', monsterList);
-
-    // Kirim seluruh loot di tanah ke pemain yang baru bergabung
-    socket.emit('loot:current', Array.from(groundItems.values()));
-
-    // B. Broadcast kemunculan pemain baru ke SEMUA pemain lain yang sudah ada di arena
-    socket.broadcast.emit('player:joined', newPlayer);
   });
 
-  // Event Sinkronisasi Penyimpanan Progres ke SQLite Database
-  socket.on('character:save', (payload: CharacterSyncPayload) => {
-    dbService.saveCharacterProgress({
-      username: payload.username,
-      level: payload.level,
-      hp: payload.hp,
-      maxHp: payload.maxHp,
-      exp: payload.exp,
-      maxExp: payload.maxExp,
-      baseAtk: payload.baseAtk,
-      zeny: payload.zeny,
-      posX: payload.x,
-      posY: payload.y,
-      inventoryJson: JSON.stringify(payload.inventory)
-    });
-    console.log(`[MMO DB] Progres karakter '${payload.username}' tersimpan ke SQLite.`);
+  // Event Sinkronisasi Penyimpanan Progres ke PostgreSQL Database
+  socket.on('character:save', async (payload: CharacterSyncPayload) => {
+    try {
+      await dbService.saveCharacterProgress({
+        username: payload.username,
+        level: payload.level,
+        hp: payload.hp,
+        maxHp: payload.maxHp,
+        exp: payload.exp,
+        maxExp: payload.maxExp,
+        baseAtk: payload.baseAtk,
+        zeny: payload.zeny,
+        posX: payload.x,
+        posY: payload.y,
+        inventoryJson: JSON.stringify(payload.inventory)
+      });
+      console.log(`[MMO DB] Progres karakter '${payload.username}' tersimpan ke PostgreSQL.`);
+    } catch (err) {
+      console.error(`[MMO DB] Gagal menyimpan karakter '${payload.username}':`, err);
+    }
   });
 
   // 3. Event perpindahan posisi pemain (WASD Movement Sync)
@@ -187,6 +225,20 @@ io.on('connection', (socket: Socket) => {
     existing.y = clampedY;
     existing.direction = payload.direction;
 
+    // Simpan transient state ke Redis Hash secara asynchronous
+    if (existing.username) {
+      redisService.updatePlayerTransientState(socket.id, {
+        username: existing.username,
+        name: existing.name,
+        x: existing.x,
+        y: existing.y,
+        hp: existing.hp,
+        maxHp: existing.maxHp,
+        level: existing.level,
+        direction: existing.direction,
+      }).catch((err) => console.error('[Redis State Error]:', err));
+    }
+
     const moveBroadcast: PlayerMovedBroadcast = {
       id: socket.id,
       x: clampedX,
@@ -200,7 +252,7 @@ io.on('connection', (socket: Socket) => {
   });
 
   // 4. Event pemain menyerang (Authoritative Combat & Anti-Cheat Validation)
-  socket.on('player:attack', (payload: PlayerAttackPayload) => {
+  socket.on('player:attack', async (payload: PlayerAttackPayload) => {
     const attacker = players.get(socket.id);
     if (!attacker) return;
 
@@ -208,7 +260,14 @@ io.on('connection', (socket: Socket) => {
     const monster = monsters.get(payload.targetMonsterId);
     if (!monster || monster.isDead) return;
 
-    // ANTI-CHEAT CHECK 1: Jarak serang maksimal (85px + 20px latency buffer = 105px)
+    // ANTI-CHEAT CHECK 1: Cooldown Serangan via Redis Atomic Token (550ms cooldown)
+    const canAttack = await redisService.checkActionCooldown(socket.id, 'attack', 550);
+    if (!canAttack) {
+      // Cooldown belum usai, cegah auto-clicker / spam script
+      return;
+    }
+
+    // ANTI-CHEAT CHECK 2: Jarak serang maksimal (85px + 20px latency buffer = 105px)
     const distance = Math.hypot(monster.x - attacker.x, monster.y - attacker.y);
     if (distance > 105) {
       console.warn(`[Anti-Cheat Blocked] Pemain ${attacker.name} mencoba menyerang dari jarak ${Math.round(distance)}px (Maks: 105px)`);
@@ -240,6 +299,9 @@ io.on('connection', (socket: Socket) => {
 
     // Jika monster mati oleh serangan pemain ini, berikan EXP & Zeny reward serta jatuhkan Item Loot
     if (isDead) {
+      // Perbarui Redis Leaderboard Kills
+      await pubClient.zincrby('leaderboard:kills', 1, attacker.name);
+
       const rewardPacket: PlayerRewardBroadcast = {
         playerId: socket.id,
         expGained: monster.config.expReward,
@@ -321,7 +383,10 @@ io.on('connection', (socket: Socket) => {
   });
 
   // 5. Event disconnect: Pemain menutup tab / terputus
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
+    // Hapus session dari Redis
+    await redisService.deletePlayerSession(socket.id);
+
     const leftPlayer = players.get(socket.id);
     if (leftPlayer) {
       players.delete(socket.id);
@@ -367,6 +432,44 @@ setInterval(() => {
   // Broadcast state monster ke semua pemain (20 FPS update)
   io.emit('monsters:update', monsterSnapshots);
 }, 1000 / TICK_RATE);
+
+// Write-Behind Periodic Snapshot: Sync state dari Redis/Memory ke PostgreSQL setiap 30 detik
+const SYNC_INTERVAL_MS = 30000;
+setInterval(async () => {
+  if (players.size === 0) return;
+
+  const onlineSocketIds = Array.from(players.keys());
+  const redisStates = await redisService.getActivePlayerStates(onlineSocketIds);
+
+  for (const socketId of onlineSocketIds) {
+    const player = players.get(socketId);
+    if (!player || !player.username) continue;
+
+    const state = redisStates[socketId];
+    const posX = state?.x ? parseInt(state.x, 10) : player.x;
+    const posY = state?.y ? parseInt(state.y, 10) : player.y;
+    const hp = state?.hp ? parseInt(state.hp, 10) : player.hp;
+
+    try {
+      await dbService.saveCharacterProgress({
+        username: player.username,
+        level: player.level,
+        hp,
+        maxHp: player.maxHp,
+        exp: 0,
+        maxExp: 100,
+        baseAtk: 12 + (player.level - 1) * 2,
+        zeny: 100,
+        posX,
+        posY,
+        inventoryJson: '[]'
+      });
+    } catch (err) {
+      console.error(`[Write-Behind Sync Error] ${player.username}:`, err);
+    }
+  }
+  console.log(`[Write-Behind Sync] Berhasil melakukan snapshot ${onlineSocketIds.length} karakter aktif ke PostgreSQL.`);
+}, SYNC_INTERVAL_MS);
 
 server.listen(PORT, () => {
   console.log(`===============================================`);

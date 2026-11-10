@@ -1,33 +1,5 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const dbPath = path.resolve(__dirname, '../database.sqlite');
-
-const db = new Database(dbPath);
-
-// Inisialisasi Skema Tabel Akun & Karakter
-db.exec(`
-  CREATE TABLE IF NOT EXISTS characters (
-    id TEXT PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    level INTEGER NOT NULL DEFAULT 1,
-    hp INTEGER NOT NULL DEFAULT 100,
-    max_hp INTEGER NOT NULL DEFAULT 100,
-    exp INTEGER NOT NULL DEFAULT 0,
-    max_exp INTEGER NOT NULL DEFAULT 100,
-    base_atk INTEGER NOT NULL DEFAULT 12,
-    zeny INTEGER NOT NULL DEFAULT 0,
-    pos_x INTEGER NOT NULL DEFAULT 800,
-    pos_y INTEGER NOT NULL DEFAULT 600,
-    inventory_json TEXT NOT NULL DEFAULT '[]',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_login DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+import { db, schema } from './db/index.js';
+import { eq } from 'drizzle-orm';
 
 export interface DbCharacter {
   id: string;
@@ -43,27 +15,54 @@ export interface DbCharacter {
   pos_x: number;
   pos_y: number;
   inventory_json: string;
-  created_at: string;
-  last_login: string;
+  created_at?: string;
+  last_login?: string;
 }
 
 export const dbService = {
   /**
-   * Otomatis mendaftarkan akun baru atau memuat karakter lama jika username sudah ada (Auto-Login/Register)
+   * Otomatis mendaftarkan akun baru atau memuat karakter lama jika username sudah ada (PostgreSQL + Drizzle)
    */
-  getOrCreateAccount(username: string): DbCharacter {
+  async getOrCreateAccount(username: string): Promise<DbCharacter> {
     const cleanUser = username.trim().toLowerCase();
-    const findStmt = db.prepare('SELECT * FROM characters WHERE username = ?');
-    const existing = findStmt.get(cleanUser) as DbCharacter | undefined;
 
-    if (existing) {
-      db.prepare('UPDATE characters SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(existing.id);
-      return existing;
+    // Cari karakter berdasarkan username
+    const existingList = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.username, cleanUser))
+      .limit(1);
+
+    if (existingList.length > 0) {
+      const existing = existingList[0];
+      // Update last_login
+      await db
+        .update(schema.characters)
+        .set({ lastLogin: new Date() })
+        .where(eq(schema.characters.id, existing.id));
+
+      return {
+        id: existing.id,
+        username: existing.username,
+        name: existing.name,
+        level: existing.level,
+        hp: existing.hp,
+        max_hp: existing.maxHp,
+        exp: existing.exp,
+        max_exp: existing.maxExp,
+        base_atk: existing.baseAtk,
+        zeny: existing.zeny,
+        pos_x: existing.posX,
+        pos_y: existing.posY,
+        inventory_json: typeof existing.inventoryJson === 'string'
+          ? existing.inventoryJson
+          : JSON.stringify(existing.inventoryJson || []),
+      };
     }
 
     const newId = `char-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const displayName = cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1);
-    const initialInventory = JSON.stringify([
+    const initialInventory = [
       {
         itemId: 'red_potion',
         name: 'Red Potion',
@@ -72,23 +71,49 @@ export const dbService = {
         description: 'Ramuan merah Prontera. Memulihkan 35 HP.',
         healAmount: 35
       }
-    ]);
+    ];
 
-    const insertStmt = db.prepare(`
-      INSERT INTO characters (
-        id, username, name, level, hp, max_hp, exp, max_exp, base_atk, zeny, pos_x, pos_y, inventory_json
-      ) VALUES (?, ?, ?, 1, 100, 100, 0, 100, 12, 100, 800, 600, ?)
-    `);
+    const inserted = await db
+      .insert(schema.characters)
+      .values({
+        id: newId,
+        username: cleanUser,
+        name: displayName,
+        level: 1,
+        hp: 100,
+        maxHp: 100,
+        exp: 0,
+        maxExp: 100,
+        baseAtk: 12,
+        zeny: 100,
+        posX: 800,
+        posY: 600,
+        inventoryJson: initialInventory,
+      })
+      .returning();
 
-    insertStmt.run(newId, cleanUser, displayName, initialInventory);
-
-    return findStmt.get(cleanUser) as DbCharacter;
+    const created = inserted[0];
+    return {
+      id: created.id,
+      username: created.username,
+      name: created.name,
+      level: created.level,
+      hp: created.hp,
+      max_hp: created.maxHp,
+      exp: created.exp,
+      max_exp: created.maxExp,
+      base_atk: created.baseAtk,
+      zeny: created.zeny,
+      pos_x: created.posX,
+      pos_y: created.posY,
+      inventory_json: JSON.stringify(created.inventoryJson),
+    };
   },
 
   /**
-   * Menyimpan progres karakter ke database (Posisi, HP, EXP, Level, Zeny, Tas)
+   * Menyimpan progres karakter ke PostgreSQL (Posisi, HP, EXP, Level, Zeny, Tas)
    */
-  saveCharacterProgress(data: {
+  async saveCharacterProgress(data: {
     username: string;
     level: number;
     hp: number;
@@ -100,26 +125,29 @@ export const dbService = {
     posX: number;
     posY: number;
     inventoryJson: string;
-  }): void {
-    const stmt = db.prepare(`
-      UPDATE characters
-      SET level = ?, hp = ?, max_hp = ?, exp = ?, max_exp = ?, base_atk = ?, zeny = ?, pos_x = ?, pos_y = ?, inventory_json = ?
-      WHERE username = ?
-    `);
+  }): Promise<void> {
+    let parsedInventory = [];
+    try {
+      parsedInventory = JSON.parse(data.inventoryJson);
+    } catch {
+      parsedInventory = [];
+    }
 
-    stmt.run(
-      data.level,
-      data.hp,
-      data.maxHp,
-      data.exp,
-      data.maxExp,
-      data.baseAtk,
-      data.zeny,
-      Math.round(data.posX),
-      Math.round(data.posY),
-      data.inventoryJson,
-      data.username.toLowerCase()
-    );
+    await db
+      .update(schema.characters)
+      .set({
+        level: data.level,
+        hp: data.hp,
+        maxHp: data.maxHp,
+        exp: data.exp,
+        maxExp: data.maxExp,
+        baseAtk: data.baseAtk,
+        zeny: data.zeny,
+        posX: Math.round(data.posX),
+        posY: Math.round(data.posY),
+        inventoryJson: parsedInventory,
+        lastLogin: new Date(),
+      })
+      .where(eq(schema.characters.username, data.username.toLowerCase()));
   }
 };
-

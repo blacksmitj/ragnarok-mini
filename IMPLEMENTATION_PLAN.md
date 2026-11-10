@@ -4,8 +4,7 @@
 Dokumen ini merupakan panduan implementasi master arsitektur **Mini Ragnarok (2D Browser-Based Action MMORPG)**.
 Sistem dibangun dengan arsitektur backend terdistribusi: **PostgreSQL** (Drizzle ORM) sebagai data storage persisten, **Redis** (ioredis + Socket.IO Redis Adapter) untuk in-memory cache, pub/sub, dan rate-limiting, serta **Phaser 3** + **React 19** pada frontend dengan tampilan **Full-Viewport & Retro Floating HUD**.
 
-Setiap fase dieksekusi secara ketat mengikuti **8-Step Learning Methodology**:
-*(1. Explain, 2. Build, 3. Explain the Code, 4. Run, 5. Test, 6. Experiment, 7. Review, 8. Checkpoint)*.
+Setiap fase dieksekusi secara bertahap dan terarah per fase.
 
 ---
 
