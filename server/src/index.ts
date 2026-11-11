@@ -21,9 +21,22 @@ import {
 import { ServerMonster } from './ServerMonster.js';
 import { dbService } from './db.js';
 import { redisAdapter, redisService, pubClient } from './redis/index.js';
+import { uploadRouter } from './routes/admin-upload.js';
+import { adminCharactersRouter } from './routes/admin-characters.js';
+import { adminItemsRouter } from './routes/admin-items.js';
+import { adminMonstersRouter } from './routes/admin-monsters.js';
+import { adminMapsRouter } from './routes/admin-maps.js';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+// Admin Content Management REST Endpoints
+app.use('/api/admin/upload', uploadRouter);
+app.use('/api/admin/characters', adminCharactersRouter);
+app.use('/api/admin/items', adminItemsRouter);
+app.use('/api/admin/monsters', adminMonstersRouter);
+app.use('/api/admin/maps', adminMapsRouter);
 
 app.get('/health', (_req, res) => {
   res.json({
