@@ -5,11 +5,12 @@ import { DamageText } from '../effects/DamageText'
 import { ChatBubble } from '../effects/ChatBubble'
 import { soundService } from '../../services/soundService'
 import { networkService } from '../../services/networkService'
+import type { GameDirection } from '../../types/network'
 
 /**
- * Tipe arah hadap karakter (4 arah mata angin).
+ * Tipe arah hadap karakter (8 arah mata angin isometrik & kardinal).
  */
-export type Direction = 'down' | 'left' | 'right' | 'up'
+export type Direction = GameDirection
 
 /**
  * Interface untuk tombol pergerakan WASD dan tombol serang Z.
@@ -170,28 +171,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    // 3. Terapkan kecepatan dan normalisasi vektor diagonal
+    // 3. Terapkan kecepatan dan normalisasi vektor 8 arah
     if (vx !== 0 || vy !== 0) {
       this.setVelocity(vx, vy)
       body.velocity.normalize().scale(this.speed)
 
-      if (vy > 0) {
-        this.lastDirection = 'down'
-      } else if (vy < 0) {
-        this.lastDirection = 'up'
-      } else if (vx < 0) {
-        this.lastDirection = 'left'
-      } else if (vx > 0) {
-        this.lastDirection = 'right'
-      }
+      this.lastDirection = Player.getDirectionFromVector(vx, vy)
 
       if (!this.isAttacking) {
-        this.play(`walk_${this.lastDirection}`, true)
+        this.playMovementAnimation('walk', this.lastDirection)
       }
     } else {
       this.setVelocity(0, 0)
       if (!this.isAttacking) {
-        this.play(`idle_${this.lastDirection}`, true)
+        this.playMovementAnimation('idle', this.lastDirection)
       }
     }
 
@@ -309,19 +302,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    // Jika ada monster di dalam jangkauan, otomatis hadapkan karakter ke arah monster tersebut
+    // Jika ada monster di dalam jangkauan, otomatis hadapkan karakter ke arah monster tersebut (8 Arah)
     if (closestMonster) {
-      const dx = closestMonster.x - this.x
-      const dy = closestMonster.y - this.y
-      if (Math.abs(dx) > Math.abs(dy)) {
-        this.lastDirection = dx >= 0 ? 'right' : 'left'
-      } else {
-        this.lastDirection = dy >= 0 ? 'down' : 'up'
-      }
+      this.lastDirection = Player.getDirectionFromVector(closestMonster.x - this.x, closestMonster.y - this.y)
     }
 
     // Mainkan animasi ayunan langkah/serang singkat & efek busur pedang
-    this.play(`walk_${this.lastDirection}`, true)
+    this.playMovementAnimation('walk', this.lastDirection)
     this.drawSlashEffect(this.lastDirection)
 
     // Efek dorongan badan sedikit maju saat menebas (lunge tween)
@@ -345,7 +332,60 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Menggambar efek visual tebasan belati/pedang Novice (slash arc) di arah hadap karakter.
+   * Menjalankan animasi gerak atau diam dengan graceful fallback ke arah kardinal jika sprite hanya memiliki 4 baris.
+   */
+  public playMovementAnimation(type: 'walk' | 'idle', dir: Direction): void {
+    const targetKey = `${type}_${dir}`
+    if (this.anims && this.anims.exists(targetKey)) {
+      this.play(targetKey, true)
+      return
+    }
+
+    // Graceful fallback ke arah kardinal terdekat jika animasi serong belum didaftarkan
+    let fallbackDir: Direction = 'down'
+    switch (dir) {
+      case 'down_left':
+      case 'down_right':
+        fallbackDir = 'down'
+        break
+      case 'up_left':
+      case 'up_right':
+        fallbackDir = 'up'
+        break
+      default:
+        fallbackDir = dir
+    }
+
+    const fallbackKey = `${type}_${fallbackDir}`
+    if (this.anims && this.anims.exists(fallbackKey)) {
+      this.play(fallbackKey, true)
+    }
+  }
+
+  /**
+   * Menghitung arah hadap 8 arah (termasuk 4 arah serong) dari vektor pergerakan X dan Y.
+   */
+  public static getDirectionFromVector(vx: number, vy: number): Direction {
+    if (vx === 0 && vy === 0) return 'down'
+
+    // Sudut derajat dari Math.atan2 (rentang -180 deg hingga +180 deg)
+    const deg = Phaser.Math.RadToDeg(Math.atan2(vy, vx))
+
+    // 8 Sektor Sudut masing-masing 45 derajat (toleransi 22.5 derajat)
+    if (deg >= -22.5 && deg < 22.5) return 'right'
+    if (deg >= 22.5 && deg < 67.5) return 'down_right'
+    if (deg >= 67.5 && deg < 112.5) return 'down'
+    if (deg >= 112.5 && deg < 157.5) return 'down_left'
+    if (deg >= 157.5 || deg < -157.5) return 'left'
+    if (deg >= -157.5 && deg < -112.5) return 'up_left'
+    if (deg >= -112.5 && deg < -67.5) return 'up'
+    if (deg >= -67.5 && deg < -22.5) return 'up_right'
+
+    return 'down'
+  }
+
+  /**
+   * Menggambar efek visual tebasan belati/pedang Novice (slash arc) di 8 arah hadap karakter.
    */
   private drawSlashEffect(dir: Direction): void {
     const offset = this.getDirectionOffset(dir, 30)
@@ -360,14 +400,31 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     slashGraphics.lineStyle(5, 0xfef08a, 0.95)
     slashGraphics.beginPath()
 
-    if (dir === 'down') {
-      slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
-    } else if (dir === 'up') {
-      slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false)
-    } else if (dir === 'left') {
-      slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(110), Phaser.Math.DegToRad(250), false)
-    } else {
-      slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false)
+    switch (dir) {
+      case 'down':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
+        break
+      case 'down_left':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(65), Phaser.Math.DegToRad(205), false)
+        break
+      case 'left':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(110), Phaser.Math.DegToRad(250), false)
+        break
+      case 'up_left':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(155), Phaser.Math.DegToRad(295), false)
+        break
+      case 'up':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false)
+        break
+      case 'up_right':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(245), Phaser.Math.DegToRad(385), false)
+        break
+      case 'right':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false)
+        break
+      case 'down_right':
+        slashGraphics.arc(0, 0, 24, Phaser.Math.DegToRad(-25), Phaser.Math.DegToRad(115), false)
+        break
     }
 
     slashGraphics.strokePath()
@@ -397,18 +454,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Helper menghitung titik koordinat di depan karakter sesuai arah hadap.
+   * Helper menghitung titik koordinat di depan karakter sesuai 8 arah hadap.
    */
   private getDirectionOffset(dir: Direction, distance: number): { x: number; y: number } {
+    const diag = distance * 0.7071
     switch (dir) {
       case 'up':
         return { x: 0, y: -distance }
-      case 'down':
-        return { x: 0, y: distance }
-      case 'left':
-        return { x: -distance, y: 0 }
+      case 'up_right':
+        return { x: diag, y: -diag }
       case 'right':
         return { x: distance, y: 0 }
+      case 'down_right':
+        return { x: diag, y: diag }
+      case 'down':
+        return { x: 0, y: distance }
+      case 'down_left':
+        return { x: -diag, y: diag }
+      case 'left':
+        return { x: -distance, y: 0 }
+      case 'up_left':
+        return { x: -diag, y: -diag }
     }
   }
 }

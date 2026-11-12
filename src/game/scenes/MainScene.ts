@@ -555,17 +555,39 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * Mendaftarkan 8 animasi karakter (4 arah Idle + 4 arah Walk).
+   * Mendaftarkan animasi karakter (Mendukung 8 Arah Lengkap Termasuk Serong & 4 Arah Kardinal).
    */
   private createCharacterAnimations(): void {
-    const directions = [
-      { dir: 'down', startRowFrame: 0 },
-      { dir: 'left', startRowFrame: 4 },
-      { dir: 'right', startRowFrame: 8 },
-      { dir: 'up', startRowFrame: 12 },
-    ]
+    const noviceTexture = this.textures.get('novice')
+    // frameTotal termasuk frame '__BASE__', kurangi 1 untuk mendapatkan frame spritesheet sebenarnya
+    const actualFrames = noviceTexture ? noviceTexture.frameTotal - 1 : 16
+    const hasEightDirections = actualFrames >= 32
 
-    for (const { dir, startRowFrame } of directions) {
+    // Urutan 8 Arah Clockwise sesuai standar RO: Bawah, Kiri Bawah, Kiri, Kiri Atas, Atas, Kanan Atas, Kanan, Kanan Bawah
+    const directions8 = hasEightDirections
+      ? [
+          { dir: 'down', startRowFrame: 0 },
+          { dir: 'down_left', startRowFrame: 4 },
+          { dir: 'left', startRowFrame: 8 },
+          { dir: 'up_left', startRowFrame: 12 },
+          { dir: 'up', startRowFrame: 16 },
+          { dir: 'up_right', startRowFrame: 20 },
+          { dir: 'right', startRowFrame: 24 },
+          { dir: 'down_right', startRowFrame: 28 },
+        ]
+      : [
+          // Fallback cerdas untuk spritesheet 4 arah retro (16 frame)
+          { dir: 'down', startRowFrame: 0 },
+          { dir: 'down_left', startRowFrame: 0 },
+          { dir: 'left', startRowFrame: 4 },
+          { dir: 'up_left', startRowFrame: 12 },
+          { dir: 'up', startRowFrame: 12 },
+          { dir: 'up_right', startRowFrame: 12 },
+          { dir: 'right', startRowFrame: 8 },
+          { dir: 'down_right', startRowFrame: 0 },
+        ]
+
+    for (const { dir, startRowFrame } of directions8) {
       const idleKey = `idle_${dir}`
       const walkKey = `walk_${dir}`
 

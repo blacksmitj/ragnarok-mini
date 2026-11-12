@@ -36,6 +36,16 @@ adminCharactersRouter.post('/', async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    const fWidth = Number(frameWidth) || 64;
+    const fHeight = Number(frameHeight) || 64;
+    if ((fWidth !== 64 && fWidth !== 32) || fWidth !== fHeight) {
+      res.status(400).json({
+        success: false,
+        error: 'Ukuran frame ditolak! Wajib menggunakan standar baku 64x64px atau 32x32px (bukan dinamis).',
+      });
+      return;
+    }
+
     const id = `char_${crypto.randomUUID().slice(0, 8)}`;
     const [inserted] = await db
       .insert(schema.characterSprites)
@@ -48,8 +58,8 @@ adminCharactersRouter.post('/', async (req: Request, res: Response): Promise<voi
         walkSheetUrl,
         attackSheetUrl,
         dieSheetUrl,
-        frameWidth: Number(frameWidth) || 64,
-        frameHeight: Number(frameHeight) || 64,
+        frameWidth: fWidth,
+        frameHeight: fHeight,
         frameRate: Number(frameRate) || 8,
       })
       .returning();

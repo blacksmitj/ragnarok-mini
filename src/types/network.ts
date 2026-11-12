@@ -1,3 +1,13 @@
+export type GameDirection =
+  | 'down'
+  | 'down_left'
+  | 'left'
+  | 'up_left'
+  | 'up'
+  | 'up_right'
+  | 'right'
+  | 'down_right'
+
 export interface PlayerData {
   id: string
   name: string
@@ -6,7 +16,7 @@ export interface PlayerData {
   level: number
   hp: number
   maxHp: number
-  direction: 'down' | 'left' | 'right' | 'up'
+  direction: GameDirection
 }
 
 export interface JoinPayload {
@@ -37,7 +47,7 @@ export interface CharacterSyncPayload {
 export interface PlayerMovePayload {
   x: number
   y: number
-  direction: 'down' | 'left' | 'right' | 'up'
+  direction: GameDirection
   isMoving: boolean
 }
 
@@ -45,7 +55,7 @@ export interface PlayerMovedBroadcast {
   id: string
   x: number
   y: number
-  direction: 'down' | 'left' | 'right' | 'up'
+  direction: GameDirection
   isMoving: boolean
 }
 

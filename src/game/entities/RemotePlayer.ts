@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import type { PlayerData, PlayerMovedBroadcast } from '../../types/network'
+import type { PlayerData, PlayerMovedBroadcast, GameDirection } from '../../types/network'
 import { ChatBubble } from '../effects/ChatBubble'
 
 /**
@@ -15,7 +15,7 @@ export class RemotePlayer extends Phaser.Physics.Arcade.Sprite {
   // Target koordinat untuk Linear Interpolation (Lerp)
   private targetX: number
   private targetY: number
-  private targetDirection: 'down' | 'left' | 'right' | 'up' = 'down'
+  private targetDirection: GameDirection = 'down'
   private isRemoteMoving: boolean = false
 
   // UI elemen pendukung: Nameplate retro di atas kepala
@@ -77,7 +77,7 @@ export class RemotePlayer extends Phaser.Physics.Arcade.Sprite {
   /**
    * Menjalankan animasi sprite RemotePlayer (Walk / Idle)
    */
-  public playAnimation(type: 'idle' | 'walk', direction: 'down' | 'left' | 'right' | 'up'): void {
+  public playAnimation(type: 'idle' | 'walk', direction: GameDirection): void {
     const animKey = `${type}_${direction}`
     if (this.anims && this.anims.currentAnim?.key !== animKey) {
       this.anims.play(animKey, true)
