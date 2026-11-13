@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react'
-import { UploadCloud, CheckCircle2, AlertCircle, Loader2, ShieldCheck, XCircle } from 'lucide-react'
+import { UploadCloud, CheckCircle2, AlertCircle, Loader2, ShieldCheck, XCircle, Sparkles } from 'lucide-react'
 import { uploadAssetToStorage } from '../../lib/api'
 import { validateCharacterSprite, type SpriteValidationResult } from '../../lib/character-sprite-validator'
 import { SpriteSlicerModal } from './sprite-slicer-modal'
+import { TextSpriteGeneratorModal } from './text-sprite-generator-modal'
 
 interface SingleSpriteUploaderProps {
   label: string
@@ -31,6 +32,7 @@ export const SingleSpriteUploader: React.FC<SingleSpriteUploaderProps> = ({
   const [validationStatus, setValidationStatus] = useState<SpriteValidationResult | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [isSlicerOpen, setIsSlicerOpen] = useState<boolean>(false)
+  const [isAiGeneratorOpen, setIsAiGeneratorOpen] = useState<boolean>(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   // Memproses berkas akhir (setelah dipotong bersih)
@@ -194,6 +196,19 @@ export const SingleSpriteUploader: React.FC<SingleSpriteUploaderProps> = ({
         )}
       </div>
 
+      {/* Tombol Generate AI (9Router) */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          disabled={disabled || loading}
+          onClick={() => setIsAiGeneratorOpen(true)}
+          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Generate via AI (9Router)
+        </button>
+      </div>
+
       {/* Pesan Kesalahan / Validasi */}
       {error && (
         <div className="flex items-start gap-1.5 text-[11px] text-rose-300 bg-rose-950/40 border border-rose-900/60 p-2 rounded">
@@ -216,6 +231,15 @@ export const SingleSpriteUploader: React.FC<SingleSpriteUploaderProps> = ({
           onCancel={handleSlicerCancel}
         />
       )}
+
+      {/* AI Text-to-Sprite Generator Modal */}
+      <TextSpriteGeneratorModal
+        isOpen={isAiGeneratorOpen}
+        onClose={() => setIsAiGeneratorOpen(false)}
+        onUseSprite={(file) => {
+          void processFinalFile(file)
+        }}
+      />
     </div>
   )
 }

@@ -26,6 +26,7 @@ import { adminCharactersRouter } from './routes/admin-characters.js';
 import { adminItemsRouter } from './routes/admin-items.js';
 import { adminMonstersRouter } from './routes/admin-monsters.js';
 import { adminMapsRouter } from './routes/admin-maps.js';
+import { adminSpriteAiRouter } from './routes/admin-sprite-ai.js';
 
 const app = express();
 app.use(cors());
@@ -37,6 +38,7 @@ app.use('/api/admin/characters', adminCharactersRouter);
 app.use('/api/admin/items', adminItemsRouter);
 app.use('/api/admin/monsters', adminMonstersRouter);
 app.use('/api/admin/maps', adminMapsRouter);
+app.use('/api/admin', adminSpriteAiRouter);
 
 app.get('/health', (_req, res) => {
   res.json({
