@@ -22,7 +22,7 @@ function AdminLayout() {
         <header className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-900/40 px-6 backdrop-blur">
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <span className="font-medium text-slate-300">Admin</span>
-            {pathParts.slice(1).map((part) => (
+            {pathParts.slice(1).map((part: string) => (
               <span key={part} className="flex items-center gap-2">
                 <ChevronRight className="h-4 w-4 text-slate-400" />
                 <span className="capitalize font-semibold text-indigo-400">{part}</span>
